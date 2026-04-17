@@ -1,0 +1,1157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Match Day">
+<title>MatchDay — Rotation Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* =============================================
+   CSS VARIABLES & RESET
+   ============================================= */
+:root {
+  --bg:        #0d0f14;
+  --surface:   #161a23;
+  --card:      #1e2330;
+  --border:    #2a3045;
+  --accent:    #00e5a0;
+  --warn:      #f5c518;
+  --danger:    #ff4560;
+  --field:     #00e5a0;
+  --bench:     #4f8ef7;
+  --injured:   #ff4560;
+  --text:      #e8ecf4;
+  --muted:     #6b7591;
+  --radius:    14px;
+  --font-head: 'Bebas Neue', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --ring-circ: 226.2; /* 2 * PI * 36 */
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.screen { display: none; width: 100%; height: 100%; }
+.screen.active { display: flex; }
+
+/* =============================================
+   SETUP SCREEN
+   ============================================= */
+#setup-screen {
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 24px 20px;
+  gap: 20px;
+}
+
+.setup-header { text-align: center; padding: 8px 0 4px; }
+
+.setup-header h1 {
+  font-family: var(--font-head);
+  font-size: 52px;
+  letter-spacing: 3px;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.setup-header p {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 4px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.field-group {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.field-group.full { grid-column: 1 / -1; }
+
+.field-group label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.field-group input[type="number"],
+.field-group textarea {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 22px;
+  font-weight: 600;
+  padding: 10px 12px;
+  outline: none;
+  -webkit-appearance: none;
+}
+
+.field-group textarea {
+  font-size: 16px;
+  font-weight: 400;
+  min-height: 140px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.field-group input:focus,
+.field-group textarea:focus { border-color: var(--accent); }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; }
+
+.toggle { position: relative; width: 56px; height: 30px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+
+.toggle-slider {
+  position: absolute; inset: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 30px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  height: 22px; width: 22px;
+  left: 3px; top: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(26px); background: #0d0f14; }
+
+#apply-btn {
+  background: var(--accent); color: #0d0f14;
+  border: none; border-radius: var(--radius);
+  font-family: var(--font-head); font-size: 28px; letter-spacing: 2px;
+  padding: 18px; width: 100%; cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+#apply-btn:active { opacity: 0.8; transform: scale(0.98); }
+
+/* =============================================
+   GAME SCREEN LAYOUT
+   ============================================= */
+#game-screen { flex-direction: column; height: 100%; overflow: hidden; }
+
+/* TOP BAR */
+#top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 16px; height: 50px; flex-shrink: 0; gap: 10px;
+}
+
+#top-bar .brand { font-family: var(--font-head); font-size: 22px; letter-spacing: 2px; color: var(--accent); }
+
+.half-block-info {
+  display: flex; gap: 8px;
+  font-size: 13px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px;
+}
+.half-block-info span { color: var(--text); }
+
+#field-count-badge {
+  font-size: 13px; font-weight: 700;
+  padding: 4px 12px; border-radius: 20px;
+  background: var(--card); border: 1.5px solid var(--border);
+  transition: all 0.2s;
+}
+#field-count-badge.ok   { color: var(--accent); border-color: var(--accent); }
+#field-count-badge.low  { color: var(--warn);   border-color: var(--warn); }
+#field-count-badge.over { color: var(--danger); border-color: var(--danger); }
+
+#settings-btn {
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--muted); border-radius: 8px; padding: 6px 12px;
+  font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+
+/* TIMER PANEL */
+#timer-panel {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 8px 14px; flex-shrink: 0; gap: 12px;
+}
+
+#timer-display {
+  font-family: var(--font-head); font-size: 68px; line-height: 1;
+  color: var(--text); letter-spacing: 3px; min-width: 168px; text-align: center; flex-shrink: 0;
+}
+#timer-display.warning  { color: var(--warn); }
+#timer-display.critical { color: var(--danger); animation: pulse 0.5s ease-in-out infinite alternate; }
+
+@keyframes pulse { from { opacity: 1; } to { opacity: 0.45; } }
+
+.timer-controls { display: flex; flex-direction: column; gap: 7px; flex: 1; }
+.timer-row { display: flex; gap: 7px; }
+
+.ctrl-btn {
+  flex: 1; padding: 11px 6px; border: none; border-radius: 10px;
+  font-family: var(--font-head); font-size: 17px; letter-spacing: 1.5px;
+  cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+}
+.ctrl-btn:active { opacity: 0.75; transform: scale(0.96); }
+
+#start-btn { background: var(--accent); color: #0d0f14; }
+#pause-btn { background: var(--warn);   color: #0d0f14; }
+#block-btn { background: var(--bench);  color: #fff; }
+#reset-btn { background: var(--card);   color: var(--danger); border: 1px solid var(--danger); }
+#save-btn  { background: var(--card);   color: var(--muted);  border: 1px solid var(--border); }
+#load-btn  { background: var(--card);   color: var(--muted);  border: 1px solid var(--border); }
+
+/* =============================================
+   NEXT-UP PANEL
+   ============================================= */
+#next-up-panel {
+  background: var(--surface);
+  border-bottom: 2px solid var(--border);
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  min-height: 74px;
+  overflow: hidden;
+  transition: border-color 0.4s;
+}
+
+/* Pulse border amber when ≤30s to rotation */
+#next-up-panel.imminent {
+  border-bottom-color: var(--warn);
+  animation: panelPulse 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes panelPulse {
+  from { border-bottom-color: var(--warn); }
+  to   { border-bottom-color: rgba(245,197,24,0.2); }
+}
+
+/* ---- Ring ---- */
+#rotation-ring-wrap {
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px 10px; flex-shrink: 0; position: relative;
+}
+
+#rotation-ring {
+  width: 80px; height: 80px;
+  transform: rotate(-90deg);   /* start arc from top */
+}
+
+#ring-track    { fill: none; stroke: var(--border); stroke-width: 5; }
+#ring-progress {
+  fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round;
+  stroke-dasharray: 226.2;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1s linear, stroke 0.3s;
+}
+#ring-progress.warn { stroke: var(--warn); }
+#ring-progress.crit { stroke: var(--danger); }
+
+#ring-label {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none;
+}
+#ring-secs { font-family: var(--font-head); font-size: 21px; line-height: 1; display: block; }
+#ring-unit { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+
+/* ---- Next-off / Next-on columns ---- */
+#next-up-cols {
+  flex: 1; display: grid; grid-template-columns: 1fr 1fr; padding: 6px 0;
+}
+
+.next-col { display: flex; flex-direction: column; padding: 0 10px; border-right: 1px solid var(--border); }
+.next-col:last-child { border-right: none; }
+
+.next-col-label {
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 5px;
+}
+.next-off-label { color: var(--danger); }
+.next-on-label  { color: var(--accent); }
+
+.next-names { display: flex; flex-direction: column; gap: 3px; flex: 1; justify-content: center; }
+
+.next-name-pill {
+  font-size: 13px; font-weight: 700;
+  padding: 3px 8px; border-radius: 20px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.next-off-pill { background: rgba(255,69,96,0.15);  color: var(--danger); border: 1px solid rgba(255,69,96,0.3); }
+.next-on-pill  { background: rgba(0,229,160,0.12);  color: var(--accent); border: 1px solid rgba(0,229,160,0.3); }
+
+/* Manual mode notice */
+#next-up-manual {
+  display: flex; align-items: center; justify-content: center; flex: 1; padding: 8px 16px;
+}
+#next-up-manual span {
+  font-size: 12px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px; text-align: center;
+}
+
+/* =============================================
+   PLAYER COLUMNS
+   ============================================= */
+#columns-area {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  flex: 1; overflow: hidden;
+}
+
+.col {
+  display: flex; flex-direction: column;
+  overflow: hidden; border-right: 1px solid var(--border);
+}
+.col:last-child { border-right: none; }
+
+.col-header {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 8px 10px; border-bottom: 2px solid transparent; flex-shrink: 0;
+}
+.col[data-col="field"]   .col-header { border-color: var(--field); }
+.col[data-col="bench"]   .col-header { border-color: var(--bench); }
+.col[data-col="injured"] .col-header { border-color: var(--injured); }
+
+.col-label { font-family: var(--font-head); font-size: 17px; letter-spacing: 1.5px; }
+.col[data-col="field"]   .col-label { color: var(--field); }
+.col[data-col="bench"]   .col-label { color: var(--bench); }
+.col[data-col="injured"] .col-label { color: var(--injured); }
+
+.col-count { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+.col-players {
+  flex: 1; overflow-y: auto; padding: 5px;
+  display: flex; flex-direction: column; gap: 5px;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* PLAYER CARD */
+.player-card {
+  background: var(--card); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 7px 9px;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  user-select: none;
+}
+
+/* Next-off: red highlight */
+.player-card.next-off {
+  border-color: var(--danger);
+  background: rgba(255,69,96,0.09);
+  box-shadow: 0 0 0 1px rgba(255,69,96,0.2);
+}
+
+/* Next-on: green highlight */
+.player-card.next-on {
+  border-color: var(--accent);
+  background: rgba(0,229,160,0.07);
+  box-shadow: 0 0 0 1px rgba(0,229,160,0.2);
+}
+
+.player-card.just-moved { animation: flashIn 0.4s ease-out; }
+
+@keyframes flashIn {
+  from { background: #2a3a50; transform: scale(1.03); }
+  to   { background: var(--card); transform: scale(1); }
+}
+
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+
+.card-name {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1;
+}
+
+.card-badge {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 10px; flex-shrink: 0; margin-left: 4px;
+}
+.badge-off { background: rgba(255,69,96,0.2);  color: var(--danger); border: 1px solid rgba(255,69,96,0.4); }
+.badge-on  { background: rgba(0,229,160,0.15); color: var(--accent); border: 1px solid rgba(0,229,160,0.35); }
+
+.card-times {
+  display: flex; gap: 5px;
+  font-size: 10px; font-weight: 600; color: var(--muted); margin-bottom: 6px;
+}
+.card-times .t-field   { color: var(--field); }
+.card-times .t-bench   { color: var(--bench); }
+.card-times .t-injured { color: var(--injured); }
+
+.card-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+
+.move-btn {
+  border: none; border-radius: 6px; padding: 5px 2px;
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+  cursor: pointer; transition: opacity 0.15s, transform 0.1s;
+}
+.move-btn:active { opacity: 0.7; transform: scale(0.95); }
+.move-btn.to-field   { background: rgba(0,229,160,0.15); color: var(--field);   border: 1px solid rgba(0,229,160,0.3); }
+.move-btn.to-bench   { background: rgba(79,142,247,0.15); color: var(--bench);  border: 1px solid rgba(79,142,247,0.3); }
+.move-btn.to-injured { background: rgba(255,69,96,0.15);  color: var(--injured);border: 1px solid rgba(255,69,96,0.3); }
+.move-btn.active-loc { opacity: 0.28; cursor: default; pointer-events: none; }
+
+/* TOTALS */
+#totals-panel {
+  background: var(--surface); border-top: 1px solid var(--border);
+  flex-shrink: 0; max-height: 190px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
+
+#totals-toggle {
+  width: 100%; background: var(--surface); border: none; border-bottom: 1px solid var(--border);
+  color: var(--muted); font-family: var(--font-head); font-size: 14px; letter-spacing: 1.5px;
+  padding: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;
+  position: sticky; top: 0; z-index: 1;
+}
+
+#totals-table-wrap { padding: 0 8px 8px; }
+
+#totals-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#totals-table th {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); padding: 5px 8px; text-align: left; border-bottom: 1px solid var(--border);
+}
+#totals-table td { padding: 5px 8px; border-bottom: 1px solid rgba(42,48,69,0.5); font-size: 12px; }
+#totals-table td:first-child { font-weight: 700; }
+#totals-table .td-field   { color: var(--field); font-weight: 600; }
+#totals-table .td-bench   { color: var(--bench); font-weight: 600; }
+#totals-table .td-injured { color: var(--injured); font-weight: 600; }
+
+/* TOAST */
+#toast {
+  position: fixed; bottom: 200px; left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--card); border: 1px solid var(--accent); color: var(--accent);
+  font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 30px;
+  opacity: 0; transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none; white-space: nowrap; z-index: 999;
+}
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SETUP SCREEN
+     ============================================================ -->
+<div id="setup-screen" class="screen active">
+  <div class="setup-header">
+    <h1>MATCHDAY</h1>
+    <p>Rotation Manager</p>
+  </div>
+
+  <div class="setup-grid">
+    <div class="field-group">
+      <label>Half Length (min)</label>
+      <input type="number" id="s-half-len" value="20" min="1" max="60">
+    </div>
+    <div class="field-group">
+      <label>Block Length (min)</label>
+      <input type="number" id="s-block-len" value="4" min="1" max="30">
+    </div>
+    <div class="field-group">
+      <label>Players on Field</label>
+      <input type="number" id="s-field-count" value="7" min="1" max="14">
+    </div>
+    <div class="field-group">
+      <label>Rotate Count</label>
+      <input type="number" id="s-rotate-count" value="3" min="1" max="7">
+    </div>
+    <div class="field-group full">
+      <label>Auto Rotation</label>
+      <div class="toggle-row">
+        <span style="font-size:15px;font-weight:600;color:var(--text)">Auto-rotate players each block</span>
+        <label class="toggle">
+          <input type="checkbox" id="s-auto-rotate" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="field-group full">
+      <label>Player List (one per line, 10–14 players)</label>
+      <textarea id="s-players" spellcheck="false">Ivey
+Aston
+Ari
+Makaira
+Jude
+Hamish
+Theo
+Ivan
+Giordi
+Abinash
+Luca
+Blake
+Cyrus</textarea>
+    </div>
+  </div>
+
+  <button id="apply-btn" onclick="applySetup()">START GAME</button>
+</div>
+
+<!-- ============================================================
+     GAME SCREEN
+     ============================================================ -->
+<div id="game-screen" class="screen">
+
+  <!-- TOP BAR -->
+  <div id="top-bar">
+    <span class="brand">U8 CUFC Wombats</span>
+    <div class="half-block-info">
+      <span>HALF <span id="cur-half">1</span></span>
+      <span style="color:var(--border)">|</span>
+      <span>BLOCK <span id="cur-block">1</span></span>
+    </div>
+    <div id="field-count-badge">— on field</div>
+    <button id="settings-btn" onclick="goSetup()">⚙ SETUP</button>
+  </div>
+
+  <!-- TIMER PANEL -->
+  <div id="timer-panel">
+    <div id="timer-display">20:00</div>
+    <div class="timer-controls">
+      <div class="timer-row">
+        <button class="ctrl-btn" id="start-btn" onclick="startTimer()">START</button>
+        <button class="ctrl-btn" id="pause-btn" onclick="pauseTimer()">PAUSE</button>
+        <button class="ctrl-btn" id="block-btn" onclick="nextBlock()">NEXT BLOCK</button>
+      </div>
+      <div class="timer-row">
+        <button class="ctrl-btn" id="reset-btn" onclick="resetGame()">RESET</button>
+        <button class="ctrl-btn" id="save-btn"  onclick="saveGame()">SAVE</button>
+        <button class="ctrl-btn" id="load-btn"  onclick="loadGame()">LOAD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       NEXT-UP PANEL
+       Left: SVG ring showing time to next rotation.
+         - Full block length = full ring
+         - Turns amber at 30s, red at 10s
+         - When ≤30s the number shows live countdown seconds
+       Right: "Next Off" and "Next On" name pills,
+         matching the highlighted player cards below.
+       ==================================================== -->
+  <div id="next-up-panel">
+
+    <!-- SVG Countdown Ring -->
+    <div id="rotation-ring-wrap">
+      <svg id="rotation-ring" viewBox="0 0 80 80">
+        <circle id="ring-track"    cx="40" cy="40" r="34"/>
+        <circle id="ring-progress" cx="40" cy="40" r="34"/>
+      </svg>
+      <div id="ring-label">
+        <span id="ring-secs">—</span>
+        <span id="ring-unit">next</span>
+      </div>
+    </div>
+
+    <!-- Auto-rotate ON: show predicted next subs -->
+    <div id="next-up-cols">
+      <div class="next-col">
+        <div class="next-col-label next-off-label">⬇ Next Off</div>
+        <div class="next-names" id="next-off-names">
+          <span style="font-size:11px;color:var(--muted)">—</span>
+        </div>
+      </div>
+      <div class="next-col">
+        <div class="next-col-label next-on-label">⬆ Next On</div>
+        <div class="next-names" id="next-on-names">
+          <span style="font-size:11px;color:var(--muted)">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-rotate OFF: manual notice -->
+    <div id="next-up-manual" style="display:none">
+      <span>Manual<br>rotation mode</span>
+    </div>
+
+  </div>
+
+  <!-- THREE PLAYER COLUMNS -->
+  <div id="columns-area">
+    <div class="col" data-col="field">
+      <div class="col-header">
+        <span class="col-label">FIELD</span>
+        <span class="col-count" id="count-field">0</span>
+      </div>
+      <div class="col-players" id="players-field"></div>
+    </div>
+    <div class="col" data-col="bench">
+      <div class="col-header">
+        <span class="col-label">BENCH</span>
+        <span class="col-count" id="count-bench">0</span>
+      </div>
+      <div class="col-players" id="players-bench"></div>
+    </div>
+    <div class="col" data-col="injured">
+      <div class="col-header">
+        <span class="col-label">INJURED</span>
+        <span class="col-count" id="count-injured">0</span>
+      </div>
+      <div class="col-players" id="players-injured"></div>
+    </div>
+  </div>
+
+  <!-- TOTALS -->
+  <div id="totals-panel">
+    <button id="totals-toggle" onclick="toggleTotals()">▲ TOTALS</button>
+    <div id="totals-table-wrap" style="display:none">
+      <table id="totals-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th class="td-field">Field</th>
+            <th class="td-bench">Bench</th>
+            <th class="td-injured">Inj</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="totals-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =============================================
+   STATE
+   ============================================= */
+let state = {
+  halfLen: 20, blockLen: 4, fieldCount: 7, rotateCount: 3, autoRotate: true,
+  half: 1, block: 1,
+  running: false,
+  halfSecsLeft: 0,
+  blockSecsLeft: 0,
+  lastTick: null,
+  players: [],  // { name, loc:'field'|'bench'|'injured', fieldSecs, benchSecs, injuredSecs }
+};
+
+let tickInterval = null;
+
+/* SVG ring constants — r=34, circumference = 2*PI*34 ≈ 213.6 */
+const RING_CIRC = 213.6;
+const COUNTDOWN_WARN = 30;   // seconds: ring turns amber, countdown shows
+const COUNTDOWN_CRIT = 10;   // seconds: ring turns red
+
+/* =============================================
+   COMPUTE NEXT ROTATION (pure — no side effects)
+   Returns { off:[names], on:[names] }
+   ============================================= */
+function computeNextRotation() {
+  if (!state.autoRotate) return { off: [], on: [] };
+
+  const onField = state.players.filter(p => p.loc === 'field');
+  const onBench = state.players.filter(p => p.loc === 'bench');
+  if (!onBench.length || !onField.length) return { off: [], on: [] };
+
+  const n = Math.min(state.rotateCount, onField.length, onBench.length);
+
+  // Highest field time comes OFF; lowest field time comes ON
+  const off = [...onField].sort((a,b) => b.fieldSecs - a.fieldSecs).slice(0, n).map(p => p.name);
+  const on  = [...onBench].sort((a,b) => a.fieldSecs - b.fieldSecs).slice(0, n).map(p => p.name);
+
+  return { off, on };
+}
+
+/* =============================================
+   SETUP → GAME
+   ============================================= */
+function applySetup() {
+  const halfLen     = parseInt(document.getElementById('s-half-len').value)     || 20;
+  const blockLen    = parseInt(document.getElementById('s-block-len').value)    || 4;
+  const fieldCount  = parseInt(document.getElementById('s-field-count').value)  || 7;
+  const rotateCount = parseInt(document.getElementById('s-rotate-count').value) || 3;
+  const autoRotate  = document.getElementById('s-auto-rotate').checked;
+  const lines = document.getElementById('s-players').value
+    .split('\n').map(l => l.trim()).filter(Boolean);
+
+  if (lines.length < 2) { alert('Enter at least 2 players.'); return; }
+
+  const players = lines.map((name, i) => ({
+    name,
+    loc: i < fieldCount ? 'field' : 'bench',
+    fieldSecs: 0, benchSecs: 0, injuredSecs: 0,
+  }));
+
+  state = {
+    halfLen, blockLen, fieldCount, rotateCount, autoRotate,
+    half: 1, block: 1, running: false,
+    halfSecsLeft: halfLen * 60, blockSecsLeft: blockLen * 60,
+    lastTick: null, players,
+  };
+
+  saveToStorage();
+  showScreen('game-screen');
+  renderAll();
+}
+
+/* =============================================
+   TIMER CONTROLS
+   ============================================= */
+function startTimer() {
+  if (state.running) return;
+  if (state.halfSecsLeft <= 0) {
+    if (state.half < 2) {
+      state.half++;
+      state.halfSecsLeft  = state.halfLen * 60;
+      state.blockSecsLeft = state.blockLen * 60;
+      state.block = 1;
+    } else { showToast('Game Over'); return; }
+  }
+  state.running  = true;
+  state.lastTick = Date.now();
+  tickInterval   = setInterval(tick, 1000);
+  renderAll();
+}
+
+function pauseTimer() {
+  if (!state.running) return;
+  clearInterval(tickInterval);
+  state.running = false;
+  saveToStorage();
+  renderAll();
+}
+
+function nextBlock() {
+  advanceBlock();
+  renderAll();
+  saveToStorage();
+}
+
+function resetGame() {
+  if (!confirm('Reset game? All time data will be cleared.')) return;
+  clearInterval(tickInterval);
+  state.running = false;
+  state.half = 1; state.block = 1;
+  state.halfSecsLeft  = state.halfLen * 60;
+  state.blockSecsLeft = state.blockLen * 60;
+  state.lastTick = null;
+  state.players.forEach((p, i) => {
+    p.fieldSecs = 0; p.benchSecs = 0; p.injuredSecs = 0;
+    p.loc = i < state.fieldCount ? 'field' : 'bench';
+  });
+  renderAll();
+  saveToStorage();
+}
+
+/* =============================================
+   TICK (every second)
+   ============================================= */
+function tick() {
+  const now     = Date.now();
+  const elapsed = state.lastTick ? Math.round((now - state.lastTick) / 1000) : 1;
+  state.lastTick = now;
+
+  /* Accumulate per-player time */
+  state.players.forEach(p => {
+    if      (p.loc === 'field')   p.fieldSecs   += elapsed;
+    else if (p.loc === 'bench')   p.benchSecs   += elapsed;
+    else if (p.loc === 'injured') p.injuredSecs += elapsed;
+  });
+
+  state.halfSecsLeft  = Math.max(0, state.halfSecsLeft  - elapsed);
+  state.blockSecsLeft = Math.max(0, state.blockSecsLeft - elapsed);
+
+  if (state.blockSecsLeft === 0) advanceBlock();
+
+  if (state.halfSecsLeft === 0) {
+    clearInterval(tickInterval);
+    state.running = false; state.lastTick = null;
+    showToast(state.half < 2 ? 'Half Time! Press START for 2nd half.' : 'Full Time!');
+  }
+
+  renderAll();
+  saveToStorage();
+}
+
+/* =============================================
+   BLOCK ADVANCEMENT
+   ============================================= */
+function advanceBlock() {
+  state.blockSecsLeft = state.blockLen * 60;
+  state.block++;
+  if (state.autoRotate) doAutoRotation();
+}
+
+/* =============================================
+   AUTO-ROTATION (mutates state)
+   ============================================= */
+function doAutoRotation() {
+  const { off, on } = computeNextRotation();
+  if (!off.length) return;
+  off.forEach(name => { const p = state.players.find(p => p.name === name); if (p) p.loc = 'bench'; });
+  on.forEach(name  => { const p = state.players.find(p => p.name === name); if (p) p.loc = 'field'; });
+  showToast('▶ IN: ' + on.map(n => n.split(' ')[0]).join(', '));
+}
+
+/* =============================================
+   PLAYER MOVEMENT
+   ============================================= */
+function movePlayer(name, newLoc) {
+  const p = state.players.find(p => p.name === name);
+  if (!p || p.loc === newLoc) return;
+  p.loc = newLoc;
+  saveToStorage();
+  renderAll();
+  const card = document.querySelector(`[data-player="${CSS.escape(name)}"]`);
+  if (card) { card.classList.remove('just-moved'); void card.offsetWidth; card.classList.add('just-moved'); }
+}
+
+/* =============================================
+   RENDER ALL
+   ============================================= */
+function renderAll() {
+  const rotation = computeNextRotation();
+  renderTimerDisplay();
+  renderNextUpPanel(rotation);
+  renderColumns(rotation);
+  renderFieldBadge();
+  renderTotals();
+  renderHalfBlock();
+}
+
+function renderHalfBlock() {
+  document.getElementById('cur-half').textContent  = state.half;
+  document.getElementById('cur-block').textContent = state.block;
+}
+
+/* =============================================
+   NEXT-UP PANEL RENDER
+   ============================================= */
+function renderNextUpPanel(rotation) {
+  /* ---- SVG ring ---- */
+  const progress  = document.getElementById('ring-progress');
+  const ringSecs  = document.getElementById('ring-secs');
+  const ringUnit  = document.getElementById('ring-unit');
+  const panel     = document.getElementById('next-up-panel');
+
+  const blockTotal = state.blockLen * 60;
+  const secsLeft   = state.blockSecsLeft;
+  const fraction   = blockTotal > 0 ? secsLeft / blockTotal : 1;
+
+  /* dashoffset: 0 = full ring, RING_CIRC = empty ring */
+  progress.style.strokeDasharray  = RING_CIRC;
+  progress.style.strokeDashoffset = RING_CIRC * (1 - fraction);
+
+  /* Colour states */
+  progress.classList.remove('warn', 'crit');
+  if (secsLeft <= COUNTDOWN_CRIT && state.running) {
+    progress.classList.add('crit');
+    ringSecs.style.color = 'var(--danger)';
+  } else if (secsLeft <= COUNTDOWN_WARN && state.running) {
+    progress.classList.add('warn');
+    ringSecs.style.color = 'var(--warn)';
+  } else {
+    ringSecs.style.color = 'var(--text)';
+  }
+
+  /* Label: show live countdown seconds when ≤30s, otherwise block M:SS */
+  if (secsLeft <= COUNTDOWN_WARN && state.running) {
+    ringSecs.textContent = secsLeft;
+    ringUnit.textContent = 'secs';
+  } else if (!state.running) {
+    const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+    ringSecs.textContent = `${m}:${String(s).padStart(2,'0')}`;
+    ringUnit.textContent = 'paused';
+    ringSecs.style.color = 'var(--muted)';
+  } else {
+    const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+    ringSecs.textContent = m > 0 ? `${m}:${String(s).padStart(2,'0')}` : secsLeft;
+    ringUnit.textContent = 'block';
+  }
+
+  /* Amber panel pulse when entering 30s window (auto-rotate only) */
+  if (secsLeft <= COUNTDOWN_WARN && state.running && state.autoRotate) {
+    panel.classList.add('imminent');
+  } else {
+    panel.classList.remove('imminent');
+  }
+
+  /* ---- Next-off / Next-on columns ---- */
+  const colsDiv   = document.getElementById('next-up-cols');
+  const manualDiv = document.getElementById('next-up-manual');
+  const offEl     = document.getElementById('next-off-names');
+  const onEl      = document.getElementById('next-on-names');
+
+  if (state.autoRotate) {
+    colsDiv.style.display   = 'grid';
+    manualDiv.style.display = 'none';
+
+    offEl.innerHTML = '';
+    if (rotation.off.length) {
+      rotation.off.forEach(name => {
+        const pill = document.createElement('span');
+        pill.className   = 'next-name-pill next-off-pill';
+        pill.textContent = name.split(' ')[0];
+        offEl.appendChild(pill);
+      });
+    } else {
+      offEl.innerHTML = '<span style="font-size:11px;color:var(--muted)">—</span>';
+    }
+
+    onEl.innerHTML = '';
+    if (rotation.on.length) {
+      rotation.on.forEach(name => {
+        const pill = document.createElement('span');
+        pill.className   = 'next-name-pill next-on-pill';
+        pill.textContent = name.split(' ')[0];
+        onEl.appendChild(pill);
+      });
+    } else {
+      onEl.innerHTML = '<span style="font-size:11px;color:var(--muted)">—</span>';
+    }
+
+  } else {
+    colsDiv.style.display   = 'none';
+    manualDiv.style.display = 'flex';
+  }
+}
+
+/* =============================================
+   PLAYER COLUMNS + CARDS
+   ============================================= */
+function renderColumns(rotation) {
+  const offSet = new Set(rotation.off);
+  const onSet  = new Set(rotation.on);
+
+  ['field', 'bench', 'injured'].forEach(loc => {
+    const container = document.getElementById(`players-${loc}`);
+    const players   = state.players.filter(p => p.loc === loc);
+    document.getElementById(`count-${loc}`).textContent = players.length;
+    container.innerHTML = '';
+    players.forEach(p => {
+      container.appendChild(buildCard(p, offSet.has(p.name), onSet.has(p.name)));
+    });
+  });
+}
+
+function buildCard(p, isNextOff, isNextOn) {
+  const card = document.createElement('div');
+  card.className   = 'player-card';
+  card.dataset.player = p.name;
+
+  if (isNextOff) card.classList.add('next-off');
+  if (isNextOn)  card.classList.add('next-on');
+
+  const isField   = p.loc === 'field';
+  const isBench   = p.loc === 'bench';
+  const isInjured = p.loc === 'injured';
+
+  let badgeHTML = '';
+  if (isNextOff) badgeHTML = '<span class="card-badge badge-off">Next Off</span>';
+  if (isNextOn)  badgeHTML = '<span class="card-badge badge-on">Next On</span>';
+
+  /* Escape single quotes in player names for inline onclick safety */
+  const safe = p.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="card-name">${p.name}</div>${badgeHTML}
+    </div>
+    <div class="card-times">
+      <span class="t-field">⬢ ${fmtMin(p.fieldSecs)}</span>
+      <span class="t-bench">◈ ${fmtMin(p.benchSecs)}</span>
+      <span class="t-injured">✦ ${fmtMin(p.injuredSecs)}</span>
+    </div>
+    <div class="card-actions">
+      <button class="move-btn to-field   ${isField   ? 'active-loc':''}" onclick="movePlayer('${safe}','field')">Field</button>
+      <button class="move-btn to-bench   ${isBench   ? 'active-loc':''}" onclick="movePlayer('${safe}','bench')">Bench</button>
+      <button class="move-btn to-injured ${isInjured ? 'active-loc':''}" onclick="movePlayer('${safe}','injured')">Inj</button>
+    </div>`;
+
+  return card;
+}
+
+/* =============================================
+   FIELD COUNT BADGE
+   ============================================= */
+function renderFieldBadge() {
+  const count    = state.players.filter(p => p.loc === 'field').length;
+  const required = state.fieldCount;
+  const badge    = document.getElementById('field-count-badge');
+  if (count === required) { badge.textContent = `✅ ${count} on field`; badge.className = 'ok'; }
+  else if (count < required) { badge.textContent = `⚠️ ${count}/${required}`; badge.className = 'low'; }
+  else { badge.textContent = `⛔ ${count}/${required}`; badge.className = 'over'; }
+}
+
+/* =============================================
+   TOTALS TABLE
+   ============================================= */
+function renderTotals() {
+  const tbody = document.getElementById('totals-body');
+  tbody.innerHTML = '';
+  [...state.players].sort((a,b) => b.fieldSecs - a.fieldSecs).forEach(p => {
+    const total = p.fieldSecs + p.benchSecs + p.injuredSecs;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.name}</td>
+      <td class="td-field">${fmtMin(p.fieldSecs)}</td>
+      <td class="td-bench">${fmtMin(p.benchSecs)}</td>
+      <td class="td-injured">${fmtMin(p.injuredSecs)}</td>
+      <td>${fmtMin(total)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* =============================================
+   TIMER DISPLAY
+   ============================================= */
+function renderTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  el.textContent = fmt(state.halfSecsLeft);
+  el.className = '';
+  if      (state.halfSecsLeft <= 60)  el.className = 'critical';
+  else if (state.halfSecsLeft <= 180) el.className = 'warning';
+}
+
+/* =============================================
+   HELPERS
+   ============================================= */
+function fmt(secs) {
+  return `${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}`;
+}
+function fmtMin(secs) {
+  const m = Math.floor(secs/60), s = secs%60;
+  return s > 0 ? `${m}m${s}s` : `${m}m`;
+}
+
+/* =============================================
+   TOTALS TOGGLE
+   ============================================= */
+let totalsOpen = false;
+function toggleTotals() {
+  totalsOpen = !totalsOpen;
+  document.getElementById('totals-table-wrap').style.display = totalsOpen ? 'block' : 'none';
+  document.getElementById('totals-toggle').textContent = (totalsOpen ? '▼' : '▲') + ' TOTALS';
+}
+
+/* =============================================
+   SAVE / LOAD
+   ============================================= */
+const SAVE_KEY = 'matchday_state';
+
+function saveToStorage() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+function saveGame() { saveToStorage(); showToast('Game saved ✓'); }
+function loadGame() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) { showToast('No saved game found'); return; }
+  try {
+    const loaded = JSON.parse(raw);
+    clearInterval(tickInterval);
+    loaded.running = false; loaded.lastTick = null;
+    state = loaded;
+    showScreen('game-screen');
+    renderAll();
+    showToast('Game loaded ✓');
+  } catch(e) { showToast('Failed to load save'); }
+}
+
+/* =============================================
+   TOAST
+   ============================================= */
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
+}
+
+/* =============================================
+   SCREEN SWITCHING
+   ============================================= */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function goSetup() { pauseTimer(); showScreen('setup-screen'); }
+
+/* =============================================
+   VISIBILITY API — iPad sleep / background
+   ============================================= */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (state.running) { state._bgAt = Date.now(); saveToStorage(); }
+  } else {
+    if (state.running && state._bgAt) {
+      const elapsed = Math.round((Date.now() - state._bgAt) / 1000);
+      state._bgAt = null;
+
+      state.players.forEach(p => {
+        if      (p.loc === 'field')   p.fieldSecs   += elapsed;
+        else if (p.loc === 'bench')   p.benchSecs   += elapsed;
+        else if (p.loc === 'injured') p.injuredSecs += elapsed;
+      });
+
+      state.halfSecsLeft  = Math.max(0, state.halfSecsLeft  - elapsed);
+      state.blockSecsLeft = Math.max(0, state.blockSecsLeft - elapsed);
+
+      if (state.autoRotate && elapsed > state.blockLen * 60) doAutoRotation();
+
+      if (state.halfSecsLeft === 0) {
+        clearInterval(tickInterval); state.running = false;
+        showToast(state.half < 2 ? 'Half Time!' : 'Full Time!');
+      }
+
+      state.lastTick = Date.now();
+      renderAll();
+      saveToStorage();
+    }
+  }
+});
+
+/* =============================================
+   INIT — restore saved session on load
+   ============================================= */
+(function init() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) {
+    try {
+      const loaded = JSON.parse(raw);
+      if (loaded.players && loaded.players.length > 0) {
+        loaded.running = false; loaded.lastTick = null;
+        state = loaded;
+        showScreen('game-screen');
+        renderAll();
+        showToast('Session restored');
+        return;
+      }
+    } catch(e) {}
+  }
+  showScreen('setup-screen');
+})();
+</script>
+</body>
+</html>
