@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -6,14 +7,19 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MatchDay">
+<meta name="color-scheme" content="dark">
 <title>MatchDay — Rotation Manager</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* =============================================
    CSS VARIABLES & RESET
+   color-scheme: dark prevents the browser or OS
+   from applying any light-mode colour overrides.
+   All colours are explicit hex values.
+   Fonts fall back safely if Google Fonts is
+   unavailable (GitHub Pages, offline, iPad etc).
    ============================================= */
 :root {
+  color-scheme: dark;
   --bg:        #0d0f14;
   --surface:   #161a23;
   --card:      #1e2330;
@@ -24,20 +30,26 @@
   --field:     #00e5a0;
   --bench:     #4f8ef7;
   --injured:   #ff4560;
-  --goalie:    #c084fc;   /* purple — distinct from all other states */
+  --goalie:    #c084fc;
   --text:      #e8ecf4;
   --muted:     #6b7591;
   --radius:    14px;
-  --font-head: 'Bebas Neue', sans-serif;
-  --font-body: 'DM Sans', sans-serif;
+  --font-head: 'Bebas Neue', 'Arial Narrow', Arial, sans-serif;
+  --font-body: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
 width: 100%; height: 100%; overflow: hidden;
-background: var(–bg); color: var(–text);
-font-family: var(–font-body);
+/* Explicit hex values mirror the CSS variables above.
+This ensures correct colours on GitHub Pages, Windows
+browsers, iPad Safari and any renderer that doesn’t
+fully resolve :root custom properties early enough. */
+background: #0d0f14 !important;
+background-color: #0d0f14 !important;
+color: #e8ecf4 !important;
+font-family: ‘DM Sans’, -apple-system, BlinkMacSystemFont, ‘Segoe UI’, sans-serif;
 -webkit-tap-highlight-color: transparent;
 touch-action: manipulation;
 }
@@ -319,7 +331,7 @@ Theo</textarea>
   <!-- TOP BAR -->
 
   <div id="top-bar">
-    <span class="brand">test</span>
+    <span class="brand">V6.66</span>
     <div class="half-block-info">
       <span>HALF <span id="cur-half">1</span></span>
       <span style="color:var(--border)">|</span>
@@ -1070,6 +1082,23 @@ document.addEventListener('visibilitychange', () => {
     } catch(e) {}
   }
   showScreen('setup-screen');
+})();
+
+/* =============================================
+   PROGRESSIVE FONT ENHANCEMENT
+   Load Google Fonts only if the network allows it.
+   The app is fully functional with system fonts —
+   this is purely cosmetic. A failed fetch (GitHub,
+   offline, restrictive CSP) silently does nothing.
+   ============================================= */
+(function loadFonts() {
+  try {
+    const link = document.createElement('link');
+    link.rel  = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap';
+    link.onerror = function() { /* silently ignore — system fonts stay active */ };
+    document.head.appendChild(link);
+  } catch(e) {}
 })();
 </script>
 
