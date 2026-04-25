@@ -1,0 +1,1076 @@
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MatchDay">
+<title>MatchDay — Rotation Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* =============================================
+   CSS VARIABLES & RESET
+   ============================================= */
+:root {
+  --bg:        #0d0f14;
+  --surface:   #161a23;
+  --card:      #1e2330;
+  --border:    #2a3045;
+  --accent:    #00e5a0;
+  --warn:      #f5c518;
+  --danger:    #ff4560;
+  --field:     #00e5a0;
+  --bench:     #4f8ef7;
+  --injured:   #ff4560;
+  --goalie:    #c084fc;   /* purple — distinct from all other states */
+  --text:      #e8ecf4;
+  --muted:     #6b7591;
+  --radius:    14px;
+  --font-head: 'Bebas Neue', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+width: 100%; height: 100%; overflow: hidden;
+background: var(–bg); color: var(–text);
+font-family: var(–font-body);
+-webkit-tap-highlight-color: transparent;
+touch-action: manipulation;
+}
+
+.screen { display: none; width: 100%; height: 100%; }
+.screen.active { display: flex; }
+
+/* =============================================
+SETUP SCREEN
+============================================= */
+#setup-screen { flex-direction: column; overflow-y: auto; padding: 24px 20px; gap: 20px; }
+.setup-header { text-align: center; padding: 8px 0 4px; }
+.setup-header h1 { font-family: var(–font-head); font-size: 52px; letter-spacing: 3px; color: var(–accent); line-height: 1; }
+.setup-header p  { font-size: 14px; color: var(–muted); margin-top: 4px; letter-spacing: 1px; text-transform: uppercase; }
+.setup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field-group { background: var(–surface); border: 1px solid var(–border); border-radius: var(–radius); padding: 14px 16px; }
+.field-group.full { grid-column: 1 / -1; }
+.field-group label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; color: var(–muted); margin-bottom: 8px; }
+.field-group input[type=“number”], .field-group textarea {
+width: 100%; background: var(–card); border: 1px solid var(–border); border-radius: 8px;
+color: var(–text); font-family: var(–font-body); font-size: 22px; font-weight: 600;
+padding: 10px 12px; outline: none; -webkit-appearance: none;
+}
+.field-group textarea { font-size: 16px; font-weight: 400; min-height: 140px; resize: vertical; line-height: 1.6; }
+.field-group input:focus, .field-group textarea:focus { border-color: var(–accent); }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; }
+.toggle { position: relative; width: 56px; height: 30px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider { position: absolute; inset: 0; background: var(–card); border: 1px solid var(–border); border-radius: 30px; cursor: pointer; transition: background 0.2s; }
+.toggle-slider::before { content: ‘’; position: absolute; height: 22px; width: 22px; left: 3px; top: 3px; border-radius: 50%; background: var(–muted); transition: transform 0.2s, background 0.2s; }
+.toggle input:checked + .toggle-slider { background: var(–accent); border-color: var(–accent); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(26px); background: #0d0f14; }
+#apply-btn { background: var(–accent); color: #0d0f14; border: none; border-radius: var(–radius); font-family: var(–font-head); font-size: 28px; letter-spacing: 2px; padding: 18px; width: 100%; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+#apply-btn:active { opacity: 0.8; transform: scale(0.98); }
+
+/* =============================================
+GAME SCREEN
+============================================= */
+#game-screen { flex-direction: column; height: 100%; overflow: hidden; }
+
+/* TOP BAR */
+#top-bar { display: flex; align-items: center; justify-content: space-between; background: var(–surface); border-bottom: 1px solid var(–border); padding: 0 16px; height: 50px; flex-shrink: 0; gap: 10px; }
+#top-bar .brand { font-family: var(–font-head); font-size: 22px; letter-spacing: 2px; color: var(–accent); }
+.half-block-info { display: flex; gap: 8px; font-size: 13px; font-weight: 600; color: var(–muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.half-block-info span { color: var(–text); }
+#field-count-badge { font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 20px; background: var(–card); border: 1.5px solid var(–border); transition: all 0.2s; }
+#field-count-badge.ok   { color: var(–accent); border-color: var(–accent); }
+#field-count-badge.low  { color: var(–warn);   border-color: var(–warn); }
+#field-count-badge.over { color: var(–danger); border-color: var(–danger); }
+#settings-btn { background: var(–card); border: 1px solid var(–border); color: var(–muted); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+/* TIMER PANEL */
+#timer-panel { background: var(–surface); border-bottom: 1px solid var(–border); display: flex; align-items: center; padding: 8px 14px; flex-shrink: 0; gap: 12px; }
+#timer-display { font-family: var(–font-head); font-size: 68px; line-height: 1; color: var(–text); letter-spacing: 3px; min-width: 168px; text-align: center; flex-shrink: 0; }
+#timer-display.warning  { color: var(–warn); }
+#timer-display.critical { color: var(–danger); animation: mainPulse 0.5s ease-in-out infinite alternate; }
+@keyframes mainPulse { from { opacity:1; } to { opacity:0.45; } }
+.timer-controls { display: flex; flex-direction: column; gap: 7px; flex: 1; }
+.timer-row { display: flex; gap: 7px; }
+.ctrl-btn { flex: 1; padding: 11px 6px; border: none; border-radius: 10px; font-family: var(–font-head); font-size: 17px; letter-spacing: 1.5px; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+.ctrl-btn:active { opacity: 0.75; transform: scale(0.96); }
+#start-btn { background: var(–accent); color: #0d0f14; }
+#pause-btn { background: var(–warn);   color: #0d0f14; }
+#block-btn { background: var(–bench);  color: #fff; }
+#reset-btn { background: var(–card);   color: var(–danger); border: 1px solid var(–danger); }
+#save-btn  { background: var(–card);   color: var(–muted);  border: 1px solid var(–border); }
+#load-btn  { background: var(–card);   color: var(–muted);  border: 1px solid var(–border); }
+
+/* =============================================
+NEXT-UP PANEL
+============================================= */
+#next-up-panel { background: var(–surface); border-bottom: 2px solid var(–border); display: flex; align-items: stretch; flex-shrink: 0; min-height: 78px; overflow: hidden; transition: border-bottom-color 0.3s; }
+#next-up-panel.warn-pulse   { animation: panelWarn   0.9s ease-in-out infinite alternate; }
+#next-up-panel.danger-pulse { animation: panelDanger 0.5s ease-in-out infinite alternate; }
+@keyframes panelWarn   { from { border-bottom-color: var(–warn);   } to { border-bottom-color: rgba(245,197,24,0.15); } }
+@keyframes panelDanger { from { border-bottom-color: var(–danger); } to { border-bottom-color: rgba(255,69,96,0.15);  } }
+
+#rotation-ring-wrap { display: flex; align-items: center; justify-content: center; padding: 8px 10px; flex-shrink: 0; position: relative; }
+#rotation-ring { width: 78px; height: 78px; transform: rotate(-90deg); }
+#ring-track    { fill: none; stroke: var(–border); stroke-width: 5; }
+#ring-progress { fill: none; stroke: var(–accent); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 213.6; stroke-dashoffset: 0; transition: stroke-dashoffset 0.95s linear, stroke 0.3s; }
+#ring-progress.warn { stroke: var(–warn);   }
+#ring-progress.crit { stroke: var(–danger); }
+#ring-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; pointer-events: none; }
+#ring-secs  { font-family: var(–font-head); font-size: 21px; line-height: 1; display: block; }
+#ring-unit  { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(–muted); }
+
+#next-up-cols { flex: 1; display: grid; grid-template-columns: 1fr 1fr; padding: 6px 0; }
+.next-col { display: flex; flex-direction: column; padding: 0 10px; border-right: 1px solid var(–border); }
+.next-col:last-child { border-right: none; }
+.next-col-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 5px; }
+.next-off-label { color: var(–danger); }
+.next-on-label  { color: var(–accent); }
+.next-names { display: flex; flex-direction: column; gap: 3px; flex: 1; justify-content: center; }
+.next-name-pill { font-size: 13px; font-weight: 700; padding: 3px 8px; border-radius: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.next-off-pill { background: rgba(255,69,96,0.15);  color: var(–danger); border: 1px solid rgba(255,69,96,0.3);  }
+.next-on-pill  { background: rgba(0,229,160,0.12);  color: var(–accent); border: 1px solid rgba(0,229,160,0.3);  }
+.next-off-pill.overdue { background: rgba(255,69,96,0.3); border-color: var(–danger); animation: pillPulse 0.8s ease-in-out infinite alternate; }
+.next-on-pill.overdue  { background: rgba(0,229,160,0.25); border-color: var(–accent); }
+@keyframes pillPulse { from { opacity:1; } to { opacity:0.5; } }
+
+#mode-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(–muted); text-align: center; margin-top: 2px; }
+
+/* =============================================
+PLAYER COLUMNS — 4-column layout
+Field | Bench | Goalie | Injured
+Goalie column is slightly narrower (uses flex instead of equal grid)
+============================================= */
+#columns-area {
+display: grid;
+/* Field and Bench get more space; Goalie and Injured are narrower */
+grid-template-columns: 1.15fr 1.15fr 0.85fr 0.85fr;
+flex: 1;
+overflow: hidden;
+}
+
+.col { display: flex; flex-direction: column; overflow: hidden; border-right: 1px solid var(–border); }
+.col:last-child { border-right: none; }
+.col-header { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 8px; border-bottom: 2px solid transparent; flex-shrink: 0; }
+.col[data-col=“field”]   .col-header { border-color: var(–field);   }
+.col[data-col=“bench”]   .col-header { border-color: var(–bench);   }
+.col[data-col=“goalie”]  .col-header { border-color: var(–goalie);  }
+.col[data-col=“injured”] .col-header { border-color: var(–injured); }
+.col-label { font-family: var(–font-head); font-size: 15px; letter-spacing: 1.2px; }
+.col[data-col=“field”]   .col-label { color: var(–field);   }
+.col[data-col=“bench”]   .col-label { color: var(–bench);   }
+.col[data-col=“goalie”]  .col-label { color: var(–goalie);  }
+.col[data-col=“injured”] .col-label { color: var(–injured); }
+.col-count { font-size: 11px; font-weight: 700; color: var(–muted); }
+.col-players { flex: 1; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 4px; -webkit-overflow-scrolling: touch; }
+
+/* =============================================
+PLAYER CARD
+============================================= */
+.player-card { background: var(–card); border: 1.5px solid var(–border); border-radius: 10px; padding: 6px 8px; transition: border-color 0.25s, background 0.25s, box-shadow 0.25s; user-select: none; }
+
+/* Goalie card — always purple tinted */
+.player-card.is-goalie {
+border-color: var(–goalie);
+background: rgba(192,132,252,0.07);
+box-shadow: 0 0 0 1px rgba(192,132,252,0.15);
+}
+
+.player-card.next-off    { border-color: var(–danger); background: rgba(255,69,96,0.09);  box-shadow: 0 0 0 1px rgba(255,69,96,0.2);  }
+.player-card.overdue-off { border-color: var(–danger); background: rgba(255,69,96,0.16);  box-shadow: 0 0 0 2px rgba(255,69,96,0.35); animation: cardDanger 0.7s ease-in-out infinite alternate; }
+.player-card.next-on     { border-color: var(–accent); background: rgba(0,229,160,0.07);  box-shadow: 0 0 0 1px rgba(0,229,160,0.2);  }
+.player-card.overdue-on  { border-color: var(–accent); background: rgba(0,229,160,0.13);  box-shadow: 0 0 0 2px rgba(0,229,160,0.35); }
+@keyframes cardDanger { from { box-shadow: 0 0 0 2px rgba(255,69,96,0.4); } to { box-shadow: 0 0 0 2px rgba(255,69,96,0.05); } }
+
+.player-card.just-moved { animation: flashIn 0.4s ease-out; }
+@keyframes flashIn { from { background: #2a3a50; transform: scale(1.03); } to { background: var(–card); transform: scale(1); } }
+
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
+.card-name { font-size: 13px; font-weight: 700; color: var(–text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+.card-badge { font-size: 9px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase; padding: 2px 5px; border-radius: 10px; flex-shrink: 0; margin-left: 3px; }
+.badge-off          { background: rgba(255,69,96,0.2);   color: var(–danger); border: 1px solid rgba(255,69,96,0.4); }
+.badge-off.overdue  { background: rgba(255,69,96,0.4);   color: #fff;          border: 1px solid var(–danger); }
+.badge-on           { background: rgba(0,229,160,0.15);  color: var(–accent); border: 1px solid rgba(0,229,160,0.35); }
+.badge-on.overdue   { background: rgba(0,229,160,0.3);   color: #0d0f14;       border: 1px solid var(–accent); }
+.badge-goalie       { background: rgba(192,132,252,0.2); color: var(–goalie); border: 1px solid rgba(192,132,252,0.4); }
+
+/* Fairness / goalie time bar */
+.fairness-bar-wrap  { height: 3px; background: rgba(255,255,255,0.06); border-radius: 2px; margin-bottom: 4px; overflow: hidden; }
+.fairness-bar       { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+.fairness-bar.field-bar   { background: var(–field);  }
+.fairness-bar.bench-bar   { background: var(–bench);  }
+.fairness-bar.goalie-bar  { background: var(–goalie); }
+.fairness-bar.injured-bar { background: var(–injured);}
+
+.card-times { display: flex; flex-wrap: wrap; gap: 4px; font-size: 9px; font-weight: 600; color: var(–muted); margin-bottom: 5px; }
+.card-times .t-field   { color: var(–field);   }
+.card-times .t-bench   { color: var(–bench);   }
+.card-times .t-goalie  { color: var(–goalie);  }
+.card-times .t-injured { color: var(–injured); }
+
+.card-actions { display: grid; gap: 3px; }
+/* Standard 4-button layout: Field | Bench | Goal | Inj */
+.card-actions.has-goalie { grid-template-columns: 1fr 1fr 1fr 1fr; }
+/* Goalie column card: simpler — just Field | Bench | Inj */
+.card-actions.goalie-col { grid-template-columns: 1fr 1fr 1fr; }
+
+.move-btn { border: none; border-radius: 5px; padding: 5px 1px; font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; cursor: pointer; transition: opacity 0.15s, transform 0.1s; }
+.move-btn:active { opacity: 0.7; transform: scale(0.95); }
+.move-btn.to-field   { background: rgba(0,229,160,0.15);   color: var(–field);   border: 1px solid rgba(0,229,160,0.3);   }
+.move-btn.to-bench   { background: rgba(79,142,247,0.15);  color: var(–bench);   border: 1px solid rgba(79,142,247,0.3);  }
+.move-btn.to-goalie  { background: rgba(192,132,252,0.15); color: var(–goalie);  border: 1px solid rgba(192,132,252,0.3); }
+.move-btn.to-injured { background: rgba(255,69,96,0.15);   color: var(–injured); border: 1px solid rgba(255,69,96,0.3);   }
+.move-btn.active-loc { opacity: 0.28; cursor: default; pointer-events: none; }
+
+/* =============================================
+TOTALS PANEL
+============================================= */
+#totals-panel { background: var(–surface); border-top: 1px solid var(–border); flex-shrink: 0; max-height: 190px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+#totals-toggle { width: 100%; background: var(–surface); border: none; border-bottom: 1px solid var(–border); color: var(–muted); font-family: var(–font-head); font-size: 14px; letter-spacing: 1.5px; padding: 7px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; position: sticky; top: 0; z-index: 1; }
+#totals-table-wrap { padding: 0 8px 8px; }
+#totals-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#totals-table th { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(–muted); padding: 5px 6px; text-align: left; border-bottom: 1px solid var(–border); }
+#totals-table td { padding: 5px 6px; border-bottom: 1px solid rgba(42,48,69,0.5); font-size: 11px; }
+#totals-table td:first-child { font-weight: 700; font-size: 12px; }
+.td-field   { color: var(–field);   font-weight: 600; }
+.td-bench   { color: var(–bench);   font-weight: 600; }
+.td-goalie  { color: var(–goalie);  font-weight: 600; }
+.td-injured { color: var(–injured); font-weight: 600; }
+
+/* TOAST */
+#toast { position: fixed; bottom: 200px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(–card); border: 1px solid var(–accent); color: var(–accent); font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 30px; opacity: 0; transition: opacity 0.3s, transform 0.3s; pointer-events: none; white-space: nowrap; z-index: 999; }
+#toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(–border); border-radius: 4px; }
+</style>
+
+</head>
+<body>
+
+<!-- ============================================================
+     SETUP SCREEN
+     ============================================================ -->
+
+<div id="setup-screen" class="screen active">
+  <div class="setup-header">
+    <h1>MATCHDAY</h1>
+    <p>Rotation Manager</p>
+  </div>
+  <div class="setup-grid">
+    <div class="field-group">
+      <label>Half Length (min)</label>
+      <input type="number" id="s-half-len" value="20" min="1" max="60">
+    </div>
+    <div class="field-group">
+      <label>Block Length (min)</label>
+      <input type="number" id="s-block-len" value="4" min="1" max="30">
+    </div>
+    <div class="field-group">
+      <label>Players on Field</label>
+      <input type="number" id="s-field-count" value="7" min="1" max="14">
+    </div>
+    <div class="field-group">
+      <label>Rotate Count</label>
+      <input type="number" id="s-rotate-count" value="3" min="1" max="7">
+    </div>
+    <div class="field-group full">
+      <label>Auto Rotation</label>
+      <div class="toggle-row">
+        <span style="font-size:15px;font-weight:600;color:var(--text)">Auto-rotate players each block</span>
+        <label class="toggle">
+          <input type="checkbox" id="s-auto-rotate" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="field-group full">
+      <label>Player List (one per line, 10–14 players)</label>
+      <textarea id="s-players" spellcheck="false">Ivey
+Ari
+Makaira
+Luca
+Jude
+Aston
+Giordi
+Hamish
+Blake
+Abinash
+Cyrus
+Ivan
+Theo</textarea>
+    </div>
+  </div>
+  <button id="apply-btn" onclick="applySetup()">START GAME</button>
+</div>
+
+<!-- ============================================================
+     GAME SCREEN
+     ============================================================ -->
+
+<div id="game-screen" class="screen">
+
+  <!-- TOP BAR -->
+
+  <div id="top-bar">
+    <span class="brand">U8 CUFC WOMBATS V6</span>
+    <div class="half-block-info">
+      <span>HALF <span id="cur-half">1</span></span>
+      <span style="color:var(--border)">|</span>
+      <span>BLOCK <span id="cur-block">1</span></span>
+    </div>
+    <div id="field-count-badge">— on field</div>
+    <button id="settings-btn" onclick="goSetup()">⚙ SETUP</button>
+  </div>
+
+  <!-- TIMER PANEL -->
+
+  <div id="timer-panel">
+    <div id="timer-display">20:00</div>
+    <div class="timer-controls">
+      <div class="timer-row">
+        <button class="ctrl-btn" id="start-btn" onclick="startTimer()">START</button>
+        <button class="ctrl-btn" id="pause-btn" onclick="pauseTimer()">PAUSE</button>
+        <button class="ctrl-btn" id="block-btn" onclick="nextBlock()">NEXT BLOCK</button>
+      </div>
+      <div class="timer-row">
+        <button class="ctrl-btn" id="reset-btn" onclick="resetGame()">RESET</button>
+        <button class="ctrl-btn" id="save-btn"  onclick="saveGame()">SAVE</button>
+        <button class="ctrl-btn" id="load-btn"  onclick="loadGame()">LOAD</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- NEXT-UP PANEL -->
+
+  <div id="next-up-panel">
+    <div id="rotation-ring-wrap">
+      <svg id="rotation-ring" viewBox="0 0 78 78">
+        <circle id="ring-track"    cx="39" cy="39" r="34"/>
+        <circle id="ring-progress" cx="39" cy="39" r="34"/>
+      </svg>
+      <div id="ring-label">
+        <span id="ring-secs">—</span>
+        <span id="ring-unit">next</span>
+      </div>
+    </div>
+    <div id="next-up-cols">
+      <div class="next-col">
+        <div class="next-col-label next-off-label">⬇ Next Off</div>
+        <div class="next-names" id="next-off-names">
+          <span style="font-size:11px;color:var(--muted)">—</span>
+        </div>
+      </div>
+      <div class="next-col">
+        <div class="next-col-label next-on-label">⬆ Next On</div>
+        <div class="next-names" id="next-on-names">
+          <span style="font-size:11px;color:var(--muted)">—</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-end;padding:0 10px 8px 0;flex-shrink:0">
+      <span id="mode-label">AUTO</span>
+    </div>
+  </div>
+
+  <!-- FOUR PLAYER COLUMNS: Field | Bench | Goalie | Injured -->
+
+  <div id="columns-area">
+
+```
+<div class="col" data-col="field">
+  <div class="col-header">
+    <span class="col-label">FIELD</span>
+    <span class="col-count" id="count-field">0</span>
+  </div>
+  <div class="col-players" id="players-field"></div>
+</div>
+
+<div class="col" data-col="bench">
+  <div class="col-header">
+    <span class="col-label">BENCH</span>
+    <span class="col-count" id="count-bench">0</span>
+  </div>
+  <div class="col-players" id="players-bench"></div>
+</div>
+
+<!--
+  GOALIE COLUMN
+  • Players here accumulate goalieSecs, NOT fieldSecs
+  • Excluded from auto-rotation and next-off/on calculations
+  • Counted in field total for the on-field badge (they ARE on the pitch)
+  • Card shows a 🧤 badge and goalie time separately
+-->
+<div class="col" data-col="goalie">
+  <div class="col-header">
+    <span class="col-label">🧤 GK</span>
+    <span class="col-count" id="count-goalie">0</span>
+  </div>
+  <div class="col-players" id="players-goalie"></div>
+</div>
+
+<div class="col" data-col="injured">
+  <div class="col-header">
+    <span class="col-label">INJURED</span>
+    <span class="col-count" id="count-injured">0</span>
+  </div>
+  <div class="col-players" id="players-injured"></div>
+</div>
+```
+
+  </div>
+
+  <!-- TOTALS PANEL -->
+
+  <div id="totals-panel">
+    <button id="totals-toggle" onclick="toggleTotals()">▲ TOTALS</button>
+    <div id="totals-table-wrap" style="display:none">
+      <table id="totals-table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th class="td-field">Field</th>
+            <th class="td-bench">Bench</th>
+            <th class="td-goalie">Goalie</th>
+            <th class="td-injured">Inj</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="totals-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* =============================================
+   STATE
+   Each player has:
+     loc: 'field' | 'bench' | 'goalie' | 'injured'
+     fieldSecs   — time on field (outfield, used for fairness)
+     benchSecs   — time on bench
+     goalieSecs  — time as goalkeeper (separate, NOT counted as field time)
+     injuredSecs — time injured
+   ============================================= */
+let state = {
+  halfLen: 20, blockLen: 4, fieldCount: 7, rotateCount: 3, autoRotate: true,
+  half: 1, block: 1,
+  running: false,
+  halfSecsLeft:  0,
+  blockSecsLeft: 0,
+  overdueBlocks: 0,
+  lastTick: null,
+  players: [],
+};
+
+let tickInterval = null;
+
+const RING_CIRC  = 213.6;  // 2 * PI * 34
+const WARN_SECS  = 30;
+const CRIT_SECS  = 10;
+
+/* =============================================
+   COMPUTE NEXT ROTATION
+   Goalies are EXCLUDED — they don't participate
+   in outfield rotation at all.
+   ============================================= */
+function computeNextRotation() {
+  /* Only outfield players count */
+  const onField = state.players.filter(p => p.loc === 'field');
+  const onBench = state.players.filter(p => p.loc === 'bench');
+  if (!onBench.length || !onField.length) return { off: [], on: [] };
+
+  const n = Math.min(state.rotateCount, onField.length, onBench.length);
+
+  /* Fairness based on outfield fieldSecs only (goalieSecs excluded) */
+  const off = [...onField].sort((a,b) => b.fieldSecs - a.fieldSecs).slice(0, n).map(p => p.name);
+  const on  = [...onBench].sort((a,b) => a.fieldSecs - b.fieldSecs).slice(0, n).map(p => p.name);
+
+  return { off, on };
+}
+
+function isOverdue() { return !state.autoRotate && state.overdueBlocks > 0; }
+
+/* =============================================
+   SETUP
+   ============================================= */
+function applySetup() {
+  const halfLen     = parseInt(document.getElementById('s-half-len').value)     || 20;
+  const blockLen    = parseInt(document.getElementById('s-block-len').value)    || 4;
+  const fieldCount  = parseInt(document.getElementById('s-field-count').value)  || 7;
+  const rotateCount = parseInt(document.getElementById('s-rotate-count').value) || 3;
+  const autoRotate  = document.getElementById('s-auto-rotate').checked;
+  const lines = document.getElementById('s-players').value
+    .split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) { alert('Enter at least 2 players.'); return; }
+
+  const players = lines.map((name, i) => ({
+    name,
+    loc: i < fieldCount ? 'field' : 'bench',
+    fieldSecs:   0,
+    benchSecs:   0,
+    goalieSecs:  0,   /* goalie time tracked separately */
+    injuredSecs: 0,
+  }));
+
+  state = {
+    halfLen, blockLen, fieldCount, rotateCount, autoRotate,
+    half: 1, block: 1, running: false,
+    halfSecsLeft:  halfLen * 60,
+    blockSecsLeft: blockLen * 60,
+    overdueBlocks: 0,
+    lastTick: null, players,
+  };
+
+  saveToStorage();
+  showScreen('game-screen');
+  renderAll();
+}
+
+/* =============================================
+   TIMER CONTROLS
+   ============================================= */
+function startTimer() {
+  if (state.running) return;
+  if (state.halfSecsLeft <= 0) {
+    if (state.half < 2) {
+      state.half++;
+      state.halfSecsLeft  = state.halfLen * 60;
+      state.blockSecsLeft = state.blockLen * 60;
+      state.overdueBlocks = 0;
+      state.block = 1;
+    } else { showToast('Game Over'); return; }
+  }
+  state.running  = true;
+  state.lastTick = Date.now();
+  tickInterval   = setInterval(tick, 1000);
+  renderAll();
+}
+
+function pauseTimer() {
+  if (!state.running) return;
+  clearInterval(tickInterval);
+  state.running = false;
+  saveToStorage();
+  renderAll();
+}
+
+function nextBlock() {
+  advanceBlock(true);
+  renderAll();
+  saveToStorage();
+}
+
+function resetGame() {
+  if (!confirm('Reset game? All time data will be cleared.')) return;
+  clearInterval(tickInterval);
+  state.running = false;
+  state.half = 1; state.block = 1;
+  state.halfSecsLeft  = state.halfLen * 60;
+  state.blockSecsLeft = state.blockLen * 60;
+  state.overdueBlocks = 0;
+  state.lastTick = null;
+  state.players.forEach((p, i) => {
+    p.fieldSecs = 0; p.benchSecs = 0; p.goalieSecs = 0; p.injuredSecs = 0;
+    p.loc = i < state.fieldCount ? 'field' : 'bench';
+  });
+  renderAll();
+  saveToStorage();
+}
+
+/* =============================================
+   TICK — every second
+   Key rule: goalie accumulates goalieSecs only.
+             Their fieldSecs do NOT increase while
+             in goal, preserving rotation fairness.
+   ============================================= */
+function tick() {
+  const now     = Date.now();
+  const elapsed = state.lastTick ? Math.round((now - state.lastTick) / 1000) : 1;
+  state.lastTick = now;
+
+  state.players.forEach(p => {
+    if      (p.loc === 'field')   p.fieldSecs   += elapsed;  // outfield time
+    else if (p.loc === 'bench')   p.benchSecs   += elapsed;
+    else if (p.loc === 'goalie')  p.goalieSecs  += elapsed;  // goalie time — separate
+    else if (p.loc === 'injured') p.injuredSecs += elapsed;
+  });
+
+  state.halfSecsLeft = Math.max(0, state.halfSecsLeft - elapsed);
+
+  if (state.blockSecsLeft > 0) {
+    state.blockSecsLeft = Math.max(0, state.blockSecsLeft - elapsed);
+    if (state.blockSecsLeft === 0) {
+      /* Block boundary reached — increment counter and reset timer for next block */
+      state.block++;
+      state.blockSecsLeft = state.blockLen * 60;   // ← restart block timer every time
+      if (state.autoRotate) doAutoRotation();
+      else { state.overdueBlocks = 0; showToast('⏰ Rotation due — make your subs!'); }
+    }
+  } else if (!state.autoRotate) {
+    /* Manual mode only: accumulate overdue seconds past block boundary */
+    state.overdueBlocks = (state.overdueBlocks || 0) + elapsed;
+  }
+
+  if (state.halfSecsLeft === 0) {
+    clearInterval(tickInterval);
+    state.running = false; state.lastTick = null; state.overdueBlocks = 0;
+    showToast(state.half < 2 ? 'Half Time! Press START for 2nd half.' : 'Full Time!');
+  }
+
+  renderAll();
+  saveToStorage();
+}
+
+/* =============================================
+   BLOCK ADVANCEMENT
+   ============================================= */
+function advanceBlock(isManual = false) {
+  state.blockSecsLeft = state.blockLen * 60;
+  state.overdueBlocks = 0;
+  if (isManual) state.block++;
+  if (state.autoRotate) doAutoRotation();
+}
+
+/* =============================================
+   AUTO-ROTATION
+   Goalies are never touched — only outfield players.
+   ============================================= */
+function doAutoRotation() {
+  const { off, on } = computeNextRotation();
+  if (!off.length) return;
+  off.forEach(name => { const p = state.players.find(p => p.name === name); if (p) p.loc = 'bench'; });
+  on.forEach(name  => { const p = state.players.find(p => p.name === name); if (p) p.loc = 'field'; });
+  showToast('▶ IN: ' + on.map(n => n.split(' ')[0]).join(', '));
+}
+
+/* =============================================
+   PLAYER MOVEMENT
+   Moving to 'goalie': player leaves outfield rotation pool.
+   Moving from 'goalie' back to field/bench: re-enters rotation.
+   ============================================= */
+function movePlayer(name, newLoc) {
+  const p = state.players.find(p => p.name === name);
+  if (!p || p.loc === newLoc) return;
+
+  const wasField = p.loc === 'field';
+  const nowBench = newLoc === 'bench';
+
+  p.loc = newLoc;
+
+  /* Manual overdue reset when a field player is benched */
+  if (!state.autoRotate && wasField && nowBench && isOverdue()) {
+    state.overdueBlocks = 0;
+    state.blockSecsLeft = state.blockLen * 60;
+    showToast('✓ Sub made — block timer reset');
+  }
+
+  saveToStorage();
+  renderAll();
+
+  const card = document.querySelector(`[data-player="${CSS.escape(name)}"]`);
+  if (card) { card.classList.remove('just-moved'); void card.offsetWidth; card.classList.add('just-moved'); }
+}
+
+/* =============================================
+   RENDER ALL
+   ============================================= */
+function renderAll() {
+  const rotation = computeNextRotation();
+  renderTimerDisplay();
+  renderNextUpPanel(rotation);
+  renderColumns(rotation);
+  renderFieldBadge();
+  renderTotals();
+  renderHalfBlock();
+}
+
+function renderHalfBlock() {
+  document.getElementById('cur-half').textContent  = state.half;
+  document.getElementById('cur-block').textContent = state.block;
+}
+
+function renderTimerDisplay() {
+  const el = document.getElementById('timer-display');
+  el.textContent = fmt(state.halfSecsLeft);
+  el.className = '';
+  if      (state.halfSecsLeft <= 60)  el.className = 'critical';
+  else if (state.halfSecsLeft <= 180) el.className = 'warning';
+}
+
+/* =============================================
+   NEXT-UP PANEL
+   ============================================= */
+function renderNextUpPanel(rotation) {
+  const panel    = document.getElementById('next-up-panel');
+  const progress = document.getElementById('ring-progress');
+  const ringSecs = document.getElementById('ring-secs');
+  const ringUnit = document.getElementById('ring-unit');
+  const modeLbl  = document.getElementById('mode-label');
+
+  const blockTotal = state.blockLen * 60;
+  const overdue    = isOverdue();
+  let ringFraction, secsDisplay, unitDisplay, ringColor, secsColor;
+
+  if (overdue) {
+    ringFraction = Math.min((state.overdueBlocks % blockTotal) / blockTotal, 1);
+    secsDisplay  = state.overdueBlocks;
+    unitDisplay  = 'OVERDUE';
+    ringColor    = 'crit'; secsColor = 'var(--danger)';
+  } else {
+    const secsLeft = state.blockSecsLeft;
+    ringFraction   = blockTotal > 0 ? secsLeft / blockTotal : 1;
+    if (secsLeft <= CRIT_SECS && state.running) {
+      ringColor = 'crit'; secsColor = 'var(--danger)'; unitDisplay = 'SECS'; secsDisplay = secsLeft;
+    } else if (secsLeft <= WARN_SECS && state.running) {
+      ringColor = 'warn'; secsColor = 'var(--warn)';   unitDisplay = 'SECS'; secsDisplay = secsLeft;
+    } else {
+      ringColor = ''; secsColor = state.running ? 'var(--text)' : 'var(--muted)';
+      const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+      secsDisplay = m > 0 ? `${m}:${String(s).padStart(2,'0')}` : secsLeft;
+      unitDisplay = state.running ? (m > 0 ? 'BLOCK' : 'SECS') : 'PAUSED';
+    }
+  }
+
+  progress.style.strokeDasharray  = RING_CIRC;
+  progress.style.strokeDashoffset = RING_CIRC * (1 - ringFraction);
+  progress.classList.remove('warn', 'crit');
+  if (ringColor) progress.classList.add(ringColor);
+  ringSecs.textContent = secsDisplay;
+  ringSecs.style.color = secsColor;
+  ringUnit.textContent = unitDisplay;
+
+  panel.classList.remove('warn-pulse', 'danger-pulse');
+  if (overdue) panel.classList.add('danger-pulse');
+  else if (state.blockSecsLeft <= WARN_SECS && state.running) panel.classList.add('warn-pulse');
+
+  modeLbl.textContent = state.autoRotate ? 'AUTO' : (overdue ? '⚠ SUB NOW' : 'MANUAL');
+  modeLbl.style.color = overdue ? 'var(--danger)' : 'var(--muted)';
+
+  const offEl = document.getElementById('next-off-names');
+  const onEl  = document.getElementById('next-on-names');
+
+  offEl.innerHTML = '';
+  if (rotation.off.length) {
+    rotation.off.forEach(name => {
+      const pill = document.createElement('span');
+      pill.className   = 'next-name-pill next-off-pill' + (overdue ? ' overdue' : '');
+      pill.textContent = name.split(' ')[0];
+      offEl.appendChild(pill);
+    });
+  } else { offEl.innerHTML = '<span style="font-size:11px;color:var(--muted)">—</span>'; }
+
+  onEl.innerHTML = '';
+  if (rotation.on.length) {
+    rotation.on.forEach(name => {
+      const pill = document.createElement('span');
+      pill.className   = 'next-name-pill next-on-pill' + (overdue ? ' overdue' : '');
+      pill.textContent = name.split(' ')[0];
+      onEl.appendChild(pill);
+    });
+  } else { onEl.innerHTML = '<span style="font-size:11px;color:var(--muted)">—</span>'; }
+}
+
+/* =============================================
+   PLAYER COLUMNS
+   Goalie column has different card style.
+   Field badge counts goalie as on-pitch.
+   ============================================= */
+function renderColumns(rotation) {
+  const offSet  = new Set(rotation.off);
+  const onSet   = new Set(rotation.on);
+  const overdue = isOverdue();
+
+  const sortFns = {
+    field:   (a,b) => b.fieldSecs  - a.fieldSecs,   // most field time → top
+    bench:   (a,b) => a.fieldSecs  - b.fieldSecs,   // least field time → top
+    goalie:  (a,b) => b.goalieSecs - a.goalieSecs,  // most goalie time → top
+    injured: (a,b) => a.fieldSecs  - b.fieldSecs,
+  };
+
+  ['field', 'bench', 'goalie', 'injured'].forEach(loc => {
+    const container = document.getElementById(`players-${loc}`);
+    const players   = state.players.filter(p => p.loc === loc).sort(sortFns[loc]);
+
+    document.getElementById(`count-${loc}`).textContent = players.length;
+
+    /* Max field time for fairness bar (goalie column uses goalieSecs) */
+    const maxSecs = players.reduce((m, p) =>
+      Math.max(m, loc === 'goalie' ? p.goalieSecs : p.fieldSecs), 1);
+
+    container.innerHTML = '';
+    players.forEach(p => {
+      const isOff = offSet.has(p.name);
+      const isOn  = onSet.has(p.name);
+      container.appendChild(buildCard(p, isOff, isOn, overdue, maxSecs, loc));
+    });
+  });
+}
+
+/* =============================================
+   BUILD PLAYER CARD
+   Goalie cards: purple tint, goalie time shown,
+   no next-off/on badges, move buttons go to
+   Field | Bench | Inj (not back to Goalie)
+   ============================================= */
+function buildCard(p, isNextOff, isNextOn, overdue, maxSecs, loc) {
+  const card = document.createElement('div');
+  card.className   = 'player-card';
+  card.dataset.player = p.name;
+
+  const isGoalieCol = (loc === 'goalie');
+  const isField     = p.loc === 'field';
+  const isBench     = p.loc === 'bench';
+  const isGoalie    = p.loc === 'goalie';
+  const isInjured   = p.loc === 'injured';
+
+  /* Goalie cards always get the purple class; others get rotation highlights */
+  if (isGoalie) {
+    card.classList.add('is-goalie');
+  } else {
+    if (isNextOff) card.classList.add(overdue ? 'overdue-off' : 'next-off');
+    if (isNextOn)  card.classList.add(overdue ? 'overdue-on'  : 'next-on');
+  }
+
+  /* Badge */
+  let badgeHTML = '';
+  if (isGoalie) {
+    badgeHTML = '<span class="card-badge badge-goalie">🧤 GK</span>';
+  } else if (isNextOff) {
+    badgeHTML = `<span class="card-badge badge-off${overdue?' overdue':''}">${overdue?'⚠ OFF!':'Next Off'}</span>`;
+  } else if (isNextOn) {
+    badgeHTML = `<span class="card-badge badge-on${overdue?' overdue':''}">${overdue?'▶ ON!':'Next On'}</span>`;
+  }
+
+  /* Fairness bar — goalie col shows goalie time, others show field time */
+  const barSecs  = isGoalieCol ? p.goalieSecs : p.fieldSecs;
+  const barPct   = maxSecs > 0 ? Math.round((barSecs / maxSecs) * 100) : 0;
+  const barClass = isGoalieCol ? 'goalie-bar' : (isField ? 'field-bar' : (isBench ? 'bench-bar' : 'injured-bar'));
+
+  /* Time display:
+     - Goalie col: shows goalie time prominently + field time (so coach can see outfield fairness)
+     - Other cols: standard field/bench/inj + goalie if they have any */
+  let timesHTML;
+  if (isGoalieCol) {
+    timesHTML = `
+      <span class="t-goalie">🧤 ${fmtMin(p.goalieSecs)}</span>
+      <span class="t-field" title="Outfield time">⬢ ${fmtMin(p.fieldSecs)}</span>`;
+  } else {
+    timesHTML = `
+      <span class="t-field">⬢ ${fmtMin(p.fieldSecs)}</span>
+      <span class="t-bench">◈ ${fmtMin(p.benchSecs)}</span>
+      ${p.goalieSecs > 0 ? `<span class="t-goalie">🧤 ${fmtMin(p.goalieSecs)}</span>` : ''}
+      ${p.injuredSecs > 0 ? `<span class="t-injured">✦ ${fmtMin(p.injuredSecs)}</span>` : ''}`;
+  }
+
+  /* Move buttons:
+     - Goalie col: Field | Bench | Inj (they're leaving goal)
+     - Other cols: Field | Bench | GK | Inj */
+  const safe = p.name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  let actionsHTML;
+  if (isGoalieCol) {
+    actionsHTML = `
+      <div class="card-actions goalie-col">
+        <button class="move-btn to-field"   onclick="movePlayer('${safe}','field')">Field</button>
+        <button class="move-btn to-bench"   onclick="movePlayer('${safe}','bench')">Bench</button>
+        <button class="move-btn to-injured" onclick="movePlayer('${safe}','injured')">Inj</button>
+      </div>`;
+  } else {
+    actionsHTML = `
+      <div class="card-actions has-goalie">
+        <button class="move-btn to-field   ${isField   ?'active-loc':''}" onclick="movePlayer('${safe}','field')">Field</button>
+        <button class="move-btn to-bench   ${isBench   ?'active-loc':''}" onclick="movePlayer('${safe}','bench')">Bench</button>
+        <button class="move-btn to-goalie  ${isGoalie  ?'active-loc':''}" onclick="movePlayer('${safe}','goalie')">🧤 GK</button>
+        <button class="move-btn to-injured ${isInjured ?'active-loc':''}" onclick="movePlayer('${safe}','injured')">Inj</button>
+      </div>`;
+  }
+
+  card.innerHTML = `
+    <div class="card-header">
+      <div class="card-name">${p.name}</div>${badgeHTML}
+    </div>
+    <div class="fairness-bar-wrap">
+      <div class="fairness-bar ${barClass}" style="width:${barPct}%"></div>
+    </div>
+    <div class="card-times">${timesHTML}</div>
+    ${actionsHTML}`;
+
+  return card;
+}
+
+/* =============================================
+   FIELD COUNT BADGE
+   Counts both 'field' and 'goalie' as on-pitch,
+   since the goalie IS physically on the field.
+   ============================================= */
+function renderFieldBadge() {
+  const onPitch  = state.players.filter(p => p.loc === 'field' || p.loc === 'goalie').length;
+  const required = state.fieldCount;
+  const badge    = document.getElementById('field-count-badge');
+  if (onPitch === required) { badge.textContent = `✅ ${onPitch} on pitch`; badge.className = 'ok'; }
+  else if (onPitch < required) { badge.textContent = `⚠️ ${onPitch}/${required}`; badge.className = 'low'; }
+  else { badge.textContent = `⛔ ${onPitch}/${required}`; badge.className = 'over'; }
+}
+
+/* =============================================
+   TOTALS TABLE — includes goalie column
+   ============================================= */
+function renderTotals() {
+  const tbody = document.getElementById('totals-body');
+  tbody.innerHTML = '';
+  [...state.players].sort((a,b) => b.fieldSecs - a.fieldSecs).forEach(p => {
+    const total = p.fieldSecs + p.benchSecs + p.goalieSecs + p.injuredSecs;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${p.name}${p.loc==='goalie'?' 🧤':''}</td>
+      <td class="td-field">${p.fieldSecs   > 0 ? fmtMin(p.fieldSecs)   : '—'}</td>
+      <td class="td-bench">${p.benchSecs   > 0 ? fmtMin(p.benchSecs)   : '—'}</td>
+      <td class="td-goalie">${p.goalieSecs > 0 ? fmtMin(p.goalieSecs)  : '—'}</td>
+      <td class="td-injured">${p.injuredSecs>0? fmtMin(p.injuredSecs)  : '—'}</td>
+      <td>${fmtMin(total)}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* =============================================
+   HELPERS
+   ============================================= */
+function fmt(secs) {
+  return `${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}`;
+}
+function fmtMin(secs) {
+  const m = Math.floor(secs/60), s = secs%60;
+  return s > 0 ? `${m}m${s}s` : `${m}m`;
+}
+
+/* =============================================
+   TOTALS TOGGLE
+   ============================================= */
+let totalsOpen = false;
+function toggleTotals() {
+  totalsOpen = !totalsOpen;
+  document.getElementById('totals-table-wrap').style.display = totalsOpen ? 'block' : 'none';
+  document.getElementById('totals-toggle').textContent = (totalsOpen ? '▼' : '▲') + ' TOTALS';
+}
+
+/* =============================================
+   SAVE / LOAD
+   ============================================= */
+const SAVE_KEY = 'matchday_state';
+function saveToStorage() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch(e) {}
+}
+function saveGame() { saveToStorage(); showToast('Game saved ✓'); }
+function loadGame() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) { showToast('No saved game found'); return; }
+  try {
+    const loaded = JSON.parse(raw);
+    clearInterval(tickInterval);
+    loaded.running = false; loaded.lastTick = null;
+    /* Ensure goalieSecs exists on old saves */
+    loaded.players.forEach(p => { if (!p.goalieSecs) p.goalieSecs = 0; });
+    state = loaded;
+    showScreen('game-screen');
+    renderAll();
+    showToast('Game loaded ✓');
+  } catch(e) { showToast('Failed to load save'); }
+}
+
+/* =============================================
+   TOAST
+   ============================================= */
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* =============================================
+   SCREEN SWITCHING
+   ============================================= */
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+function goSetup() { pauseTimer(); showScreen('setup-screen'); }
+
+/* =============================================
+   VISIBILITY API — iPad sleep / background
+   ============================================= */
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (state.running) { state._bgAt = Date.now(); saveToStorage(); }
+  } else {
+    if (state.running && state._bgAt) {
+      const elapsed = Math.round((Date.now() - state._bgAt) / 1000);
+      state._bgAt = null;
+
+      state.players.forEach(p => {
+        if      (p.loc === 'field')   p.fieldSecs   += elapsed;
+        else if (p.loc === 'bench')   p.benchSecs   += elapsed;
+        else if (p.loc === 'goalie')  p.goalieSecs  += elapsed;  // goalie time only
+        else if (p.loc === 'injured') p.injuredSecs += elapsed;
+      });
+
+      state.halfSecsLeft = Math.max(0, state.halfSecsLeft - elapsed);
+
+      if (state.blockSecsLeft > 0) {
+        const newBSL = Math.max(0, state.blockSecsLeft - elapsed);
+        if (newBSL === 0 && state.blockSecsLeft > 0) {
+          state.block++;
+          if (state.autoRotate) doAutoRotation();
+          else state.overdueBlocks = elapsed - state.blockSecsLeft;
+        }
+        state.blockSecsLeft = newBSL;
+      } else if (!state.autoRotate) {
+        state.overdueBlocks = (state.overdueBlocks || 0) + elapsed;
+      }
+
+      if (state.halfSecsLeft === 0) {
+        clearInterval(tickInterval); state.running = false;
+        showToast(state.half < 2 ? 'Half Time!' : 'Full Time!');
+      }
+
+      state.lastTick = Date.now();
+      renderAll();
+      saveToStorage();
+    }
+  }
+});
+
+/* =============================================
+   INIT
+   ============================================= */
+(function init() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) {
+    try {
+      const loaded = JSON.parse(raw);
+      if (loaded.players && loaded.players.length > 0) {
+        loaded.running = false; loaded.lastTick = null;
+        /* Backwards-compat: add goalieSecs if missing from old save */
+        loaded.players.forEach(p => { if (!p.goalieSecs) p.goalieSecs = 0; });
+        state = loaded;
+        showScreen('game-screen');
+        renderAll();
+        showToast('Session restored');
+        return;
+      }
+    } catch(e) {}
+  }
+  showScreen('setup-screen');
+})();
+</script>
+
+</body>
+</html>
